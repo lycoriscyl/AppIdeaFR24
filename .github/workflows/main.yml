@@ -51,4 +51,3 @@ jobs:
             echo "No changes to commit."
           fi
         # Add error handling for git operations if necessary
-```
