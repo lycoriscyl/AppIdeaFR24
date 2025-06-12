@@ -7,67 +7,72 @@ This project fetches ADS-B (Automatic Dependent Surveillance-Broadcast) data, id
 The project consists of the following main Python scripts:
 
 *   **`adsb_fetcher.py`**:
-    *   **Role**: Fetches live aircraft data from the `adsb.lol` API or uses mock data if the API is unavailable or for testing.
+    *   **Role**: Fetches live aircraft data from the `adsb.lol` API.
     *   It processes this data to identify aircraft that are likely military based on various criteria (e.g., 'mil' flag, operator keywords, aircraft type designators).
-    *   **Current Behavior**: Prints the details of fetched aircraft and its military classification to the console. It also runs internal tests using mock data to verify its classification logic.
-    *   **Note**: In its current state, this script *does not* save the fetched data to the database.
+    *   It logs identified military aircraft to the `flight_log.db` database.
+    *   **Note**: This script no longer uses internal mock data as a fallback; it focuses on live data. It does retain a set of specific test cases for verifying its `is_military_aircraft` logic.
 
 *   **`db_manager.py`**:
     *   **Role**: Manages an SQLite database named `flight_log.db`.
-    *   It is responsible for initializing the database schema, including tables for `aircraft_types` and `flight_sessions`.
-    *   It provides a function `log_flight_session()` to insert flight data into the database.
-    *   **Current Behavior**: If run directly (`python db_manager.py`), it will initialize the database (creating `flight_log.db` if it doesn't exist) and log a single dummy flight session for testing purposes.
+    *   It is responsible for initializing the database schema and providing functions to log flight data.
+    *   **Current Behavior**: If run directly (`python db_manager.py`), it will initialize the database and log a single dummy flight session (primarily for testing `db_manager.py` itself).
 
 *   **`report_generator.py`**:
-    *   **Role**: Generates summary reports based on the data stored in `flight_log.db`.
-    *   **Current Behavior**: If run directly (`python report_generator.py`), it connects to `flight_log.db` and prints several reports, including:
-        *   Overall military flight summary (total flights, total estimated costs).
-        *   Costs broken down by aircraft type (military only).
-        *   A list of the top 20 most expensive logged military flights.
-    *   **Note**: The quality and content of these reports depend entirely on the data present in `flight_log.db`. If `adsb_fetcher.py` has not been modified to save data, these reports will only reflect dummy data (if `db_manager.py` was run) or be empty.
+    *   **Role**: Generates an HTML summary report (`report.html`) based on the data stored in `flight_log.db`.
+    *   **Current Behavior**: If run directly (`python report_generator.py`), it connects to `flight_log.db` and creates/overwrites `report.html` with several reports, including an overall military flight summary, costs by aircraft type, and a list of the top 20 most expensive logged military flights.
 
 *   **`test_adsb_analyzer.py`**:
     *   **Role**: Contains unit tests for the project. (Further details about its content and how to run tests would require inspection of this file).
 
-## How to Run the Project (Integrated Workflow)
+## Automated Workflow via GitHub Actions
 
-With the recent changes, `adsb_fetcher.py` now automatically initializes the database and logs detected military aircraft.
+This project utilizes GitHub Actions to automate the process of fetching flight data and generating reports.
 
-1.  **Run the Data Fetcher and Logger:**
+-   **Daily Updates**: A workflow is scheduled to run daily (at midnight UTC). It can also be triggered by pushes to the `main` branch or manually.
+-   **Data Fetching**: The action runs `adsb_fetcher.py` to fetch the latest military aircraft data from the live API, which is then logged into `flight_log.db`.
+-   **Report Generation**: After fetching data, `report_generator.py` is executed to produce an updated `report.html` file based on the contents of `flight_log.db`.
+-   **Automatic Commits**: The updated `flight_log.db` and `report.html` are automatically committed back to the repository.
+
+You can find the latest generated report by viewing the `report.html` file in this repository. If GitHub Pages is enabled for this repository (serving from the `main` branch's root or `/docs` folder), the report may also be viewable directly at a URL like `https://<your-username>.github.io/<repository-name>/report.html`.
+
+## How to Run Manually / For Development
+
+While the primary operation is automated, you can run the scripts manually for development, testing, or immediate updates:
+
+1.  **Ensure Dependencies (if any):**
+    *   If the project had external Python dependencies listed in a `requirements.txt`, you would install them first (e.g., `pip install -r requirements.txt`). This project currently uses standard libraries.
+
+2.  **Run the Data Fetcher and Logger:**
     *   Open your terminal or command prompt.
     *   Navigate to the project directory.
     *   Run the command: `python adsb_fetcher.py`
     *   **Behavior**:
-        *   This script will first ensure the database (`flight_log.db`) and its tables are initialized (by calling functionality from `db_manager.py`).
+        *   This script will first ensure the database (`flight_log.db`) and its tables are initialized.
         *   It will then attempt to fetch live aircraft data.
         *   Identified military aircraft will be printed to the console AND logged as flight sessions into the `flight_log.db` database.
-        *   If live data fetching fails, it will process its internal mock data, and military aircraft from this mock set will also be logged (this part might be optional based on implementation).
 
-2.  **Generate Reports:**
-    *   After `adsb_fetcher.py` has run at least once (and successfully processed some data), you can generate reports.
+3.  **Generate the HTML Report:**
+    *   After `adsb_fetcher.py` has run, you can generate the report:
     *   In your terminal, run: `python report_generator.py`
-    *   **Behavior**: This will read all logged flight sessions from `flight_log.db` (including those just added by `adsb_fetcher.py`) and print summary reports to the console.
+    *   **Behavior**: This will read all logged flight sessions from `flight_log.db` and create/overwrite `report.html` with the summary reports. Open `report.html` in a web browser to view it.
 
-*Running `python db_manager.py` directly is still possible for manually initializing the database or testing its functions, but it's no longer a required first step for the main workflow.*
+*Running `python db_manager.py` directly is still possible for manually initializing the database or testing its functions, but it's not a required step for the main workflow.*
 
 ## Functionality Assessment
 
-*   **Data Fetching, Identification, and Logging**: `adsb_fetcher.py` is functional in fetching data, identifying military aircraft, and **now logs these aircraft to the `flight_log.db` database.**
-*   **Database Management**: `db_manager.py` is functional in creating, structuring, and saving data to the database, now primarily used by `adsb_fetcher.py`.
-*   **Reporting**: `report_generator.py` is functional in generating reports from the database content, which now includes data captured from the live feed.
-
-**Integrated Pipeline**: The project now functions as an integrated pipeline where fetched and identified military aircraft are automatically logged to the database, making them available for reporting via `report_generator.py`.
+*   **Data Fetching, Identification, and Logging**: `adsb_fetcher.py` is functional in fetching live data, identifying military aircraft, and logging these aircraft to the `flight_log.db` database.
+*   **Database Management**: `db_manager.py` is functional in creating, structuring, and saving data to the database.
+*   **Reporting**: `report_generator.py` is functional in generating an HTML report (`report.html`) from the database content.
+*   **Automation**: The process of data fetching, logging, and report generation is automated via GitHub Actions, ensuring the repository's `flight_log.db` and `report.html` are kept up-to-date.
 
 ## Testing
 
-The project includes a test file: `test_adsb_analyzer.py`.
+The project includes a test file: `test_adsb_analyzer.py`. Additionally, `adsb_fetcher.py` contains internal specific test cases to verify the `is_military_aircraft` classification logic.
 
-This file is intended to house automated tests for the project's components. To run these tests, you would typically use a Python test runner like `pytest` or the built-in `unittest` module.
-
-For example, if using `pytest`:
-1.  Ensure `pytest` is installed (`pip install pytest`).
+To run tests defined in `test_adsb_analyzer.py` (assuming it uses a standard test framework like `unittest` or `pytest`):
+1.  Ensure necessary test runners like `pytest` are installed (e.g., `pip install pytest`).
 2.  Navigate to the project's root directory in your terminal.
-3.  Run the command: `pytest`
+3.  Run the command: `pytest` (or `python -m unittest discover` for `unittest`).
 
-Executing the tests can help verify that individual functions and parts of the project (like the aircraft identification logic or database operations) are working as expected, especially after making changes to the codebase.
+Executing these tests can help verify that individual functions and parts of the project are working as expected.
 ```
