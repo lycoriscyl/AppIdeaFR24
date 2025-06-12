@@ -1,6 +1,7 @@
 import re
 import requests
 import json
+from db_manager import log_flight_session, init_db
 
 # Predefined list of military aircraft type codes (example)
 MILITARY_AIRCRAFT_TYPES = ["F16", "F18", "F22", "F35", "C130", "C17", "KC135", "P8", "UH60", "E3CF", "A400", "MRTT", "CC150", "HC144", "TYPHOON", "SNTNL", "UAV"]
@@ -108,6 +109,7 @@ def is_military_aircraft(aircraft_data):
     return False
 
 if __name__ == "__main__":
+    init_db() # Initialize the database
     print("Fetching live aircraft data...")
     live_aircraft_data = fetch_live_adsb_data()
 
@@ -120,6 +122,18 @@ if __name__ == "__main__":
             is_mil = is_military_aircraft(aircraft)
             if is_mil:
                 military_aircraft_count +=1
+                # Prepare flight_data for logging
+                flight_data = {
+                    'hex': aircraft.get('hex'),
+                    'aircraft_type_code': aircraft.get('t'),
+                    'operator': aircraft.get('op'),
+                    'start_time': aircraft.get('ts'),
+                    'end_time': aircraft.get('ts'), # Instantaneous data
+                    'total_distance_nm': 0.0, # Not available
+                    'calculated_cost': 0.0, # Not available
+                    'is_military_confirmed': 1 # Changed to integer 1 for True
+                }
+                log_flight_session(flight_data)
             print(
                 f"{i+1}. HEX: {aircraft.get('hex', 'N/A')}, "
                 f"Type: {aircraft.get('t', 'N/A')}, Operator: {aircraft.get('op', 'N/A')}, "
@@ -136,15 +150,23 @@ if __name__ == "__main__":
     military_aircraft_count_mock = 0
 
     print("--- Military Aircraft Detection Report (Mock Data) ---")
+    # Decide if mock data should also be logged. For now, focusing on live data as per instructions.
+    # If logging mock data is desired, the same logic as above for live_aircraft_data would be applied here.
     for aircraft in mock_data:
         if is_military_aircraft(aircraft):
             military_aircraft_count_mock += 1
-            # This detailed print can be verbose for mock data, consider summarizing
-            # print(
-            #     f"Military Aircraft Detected: HEX={aircraft.get('hex', 'N/A')}, "
-            #     f"Type={aircraft.get('t', 'N/A')}, Operator={aircraft.get('op', 'N/A')}, "
-            #     f"MilFlag={aircraft.get('mil', 'N/A')}"
-            # )
+            # Example of logging mock military data if desired:
+            # flight_data_mock = {
+            #     'hex': aircraft.get('hex'),
+            #     'aircraft_type_code': aircraft.get('t'),
+            #     'operator': aircraft.get('op'),
+            #     'start_time': aircraft.get('ts'),
+            #     'end_time': aircraft.get('ts'),
+            #     'total_distance_nm': 0.0,
+            #     'calculated_cost': 0.0,
+            #     'is_military_confirmed': 1 # Changed to integer 1 for True
+            # }
+            # log_flight_session(flight_data_mock) # UNCOMMENT TO LOG MOCK DATA
 
     if military_aircraft_count_mock == 0:
         print("\nNo military aircraft detected in the mock data (is_military_aircraft test).")
