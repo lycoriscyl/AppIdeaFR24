@@ -1,6 +1,7 @@
 import re
 import requests
 import json
+from db_manager import log_flight_session, init_db
 
 # Predefined list of military aircraft type codes (example)
 MILITARY_AIRCRAFT_TYPES = ["F16", "F18", "F22", "F35", "C130", "C17", "KC135", "P8", "UH60", "E3CF", "A400", "MRTT", "CC150", "HC144", "TYPHOON", "SNTNL", "UAV"]
@@ -14,29 +15,6 @@ MILITARY_OPERATOR_KEYWORDS = [
 # Regex for common military abbreviations (ensures whole word match)
 MILITARY_ABBREVIATIONS_REGEX = r"\b(USAF|USN|USMC|USCG|ANG|RAF|RCAF|GAF|FAF)\b"
 # GAF = German Air Force, FAF = French Air Force (though full name is also in keywords)
-
-def get_mock_adsb_data():
-    """
-    Returns a list of dictionaries, simulating flight data from an ADSBexchange API.
-    """
-    return [
-        {"hex": "AE1234", "t": "F16", "op": "USAF", "alt_baro": 25000, "gs": 500, "lat": 34.0, "lon": -118.0, "ts": 1678886400, "mil": True},
-        {"hex": "AC5678", "t": "B738", "op": "Southwest Airlines", "alt_baro": 35000, "gs": 450, "lat": 36.0, "lon": -115.0, "ts": 1678886420, "mil": False},
-        {"hex": "AE5F01", "t": "KC135", "op": "168th ARW Alaska ANG", "alt_baro": 22000, "gs": 380, "lat": 64.8, "lon": -147.7, "ts": 1678886500, "mil": True},
-        {"hex": "ADBF00", "t": "C17", "op": "US AIR FORCE", "alt_baro": 18000, "gs": 320, "lat": 33.0, "lon": -117.0, "ts": 1678886550, "mil": False},
-        {"hex": "AE010A", "t": "P8", "op": "US NAVY", "alt_baro": 20000, "gs": 400, "lat": 32.7, "lon": -96.8, "ts": 1678886600, "mil": False},
-        {"hex": "AE4C23", "t": "UH60", "op": "US ARMY", "alt_baro": 5000, "gs": 120, "lat": 34.7, "lon": -86.6, "ts": 1678886650, "mil": None},
-        {"hex": "N12345", "t": "C172", "op": "CIVIL AIR PATROL", "alt_baro": 3000, "gs": 90, "lat": 35.0, "lon": -119.0, "ts": 1678886700, "mil": False},
-        {"hex": "AE67F1", "t": "E3CF", "op": "NATO", "alt_baro": 30000, "gs": 420, "lat": 52.0, "lon": 5.0, "ts": 1678886750, "mil": True},
-        {"hex": "43C2F2", "t": "A400", "op": "ROYAL AIR FORCE", "alt_baro": 15000, "gs": 300, "lat": 51.5, "lon": -0.1, "ts": 1678886800, "mil": None},
-        {"hex": "7CF001", "t": "MRTT", "op": "LUFTWAFFE", "alt_baro": 28000, "gs": 430, "lat": 52.5, "lon": 13.4, "ts": 1678886850, "mil": True},
-        {"hex": "AE20C1", "t": "C130", "op": "US MARINES", "alt_baro": 10000, "gs": 250, "lat": 32.8, "lon": -117.1, "ts": 1678886900, "mil": True},
-        {"hex": "3EBA00", "t": "A332", "op": "Armée de l'Air", "alt_baro": 32000, "gs": 480, "lat": 48.8, "lon": 2.3, "ts": 1678886950, "mil": False}, # Note: A332 is civil type, op is military
-        {"hex": "AE040F", "t": "HC144", "op": "US COAST GUARD", "alt_baro": 8000, "gs": 200, "lat": 25.8, "lon": -80.2, "ts": 1678887000, "mil": None},
-        {"hex": "ZZZ123", "t": "DRONE", "op": "UNKNOWN", "alt_baro": 500, "gs": 50, "lat": 35.1, "lon": -118.5, "ts": 1678887050, "mil": False},
-        {"hex": "MIL001", "t": "UAV", "op": "CLASSIFIED", "alt_baro": 12000, "gs": 150, "lat": 37.0, "lon": -116.0, "ts": 1678887100, "mil": True},
-        {"hex": "CFC876", "t": "CC150", "op": "RCAF", "alt_baro": 33000, "gs": 460, "lat": 45.4, "lon": -75.7, "ts": 1678887150, "mil": None}
-    ]
 
 def fetch_live_adsb_data():
     """
@@ -108,6 +86,7 @@ def is_military_aircraft(aircraft_data):
     return False
 
 if __name__ == "__main__":
+    init_db() # Initialize the database
     print("Fetching live aircraft data...")
     live_aircraft_data = fetch_live_adsb_data()
 
@@ -120,6 +99,18 @@ if __name__ == "__main__":
             is_mil = is_military_aircraft(aircraft)
             if is_mil:
                 military_aircraft_count +=1
+                # Prepare flight_data for logging
+                flight_data = {
+                    'hex': aircraft.get('hex'),
+                    'aircraft_type_code': aircraft.get('t'),
+                    'operator': aircraft.get('op'),
+                    'start_time': aircraft.get('ts'),
+                    'end_time': aircraft.get('ts'), # Instantaneous data
+                    'total_distance_nm': 0.0, # Not available
+                    'calculated_cost': 0.0, # Not available
+                    'is_military_confirmed': 1 # Changed to integer 1 for True
+                }
+                log_flight_session(flight_data)
             print(
                 f"{i+1}. HEX: {aircraft.get('hex', 'N/A')}, "
                 f"Type: {aircraft.get('t', 'N/A')}, Operator: {aircraft.get('op', 'N/A')}, "
@@ -129,44 +120,9 @@ if __name__ == "__main__":
             )
 
         print(f"\nTotal military aircraft detected from live feed: {military_aircraft_count}")
+    # If no live data, a message is already printed. Script will then proceed to specific case verification.
 
-    # Keep the existing mock data tests for is_military_aircraft function verification
-    print("\n--- Running Mock Data Tests for is_military_aircraft function ---")
-    mock_data = get_mock_adsb_data()
-    military_aircraft_count_mock = 0
-
-    print("--- Military Aircraft Detection Report (Mock Data) ---")
-    for aircraft in mock_data:
-        if is_military_aircraft(aircraft):
-            military_aircraft_count_mock += 1
-            # This detailed print can be verbose for mock data, consider summarizing
-            # print(
-            #     f"Military Aircraft Detected: HEX={aircraft.get('hex', 'N/A')}, "
-            #     f"Type={aircraft.get('t', 'N/A')}, Operator={aircraft.get('op', 'N/A')}, "
-            #     f"MilFlag={aircraft.get('mil', 'N/A')}"
-            # )
-
-    if military_aircraft_count_mock == 0:
-        print("\nNo military aircraft detected in the mock data (is_military_aircraft test).")
-    else:
-        print(f"\nTotal military aircraft detected in mock data (is_military_aircraft test): {military_aircraft_count_mock}")
-
-    # print("\n--- All Aircraft Data (Mock - for verification) ---")
-    # expected_military_hex = [
-    #     "AE1234", "AE5F01", "ADBF00", "AE010A", "AE4C23", "AE67F1",
-    #     "43C2F2", "7CF001", "AE20C1", "3EBA00", "AE040F", "MIL001", "CFC876"
-    # ]
-    # for i, aircraft in enumerate(mock_data):
-    #     classification = is_military_aircraft(aircraft)
-    #     status_char = "M" if classification else "C"
-    #     expected_char = "M" if aircraft.get('hex') in expected_military_hex else "C"
-    #     correctness_indicator = "OK" if status_char == expected_char else "MISMATCH"
-    #     print(
-    #         f"{i+1}. HEX: {aircraft.get('hex')}, Type: {aircraft.get('t')}, Op: {aircraft.get('op')}, "
-    #         f"Mil Flag: {aircraft.get('mil')}, Classified: {status_char}, Expected: {expected_char} -> {correctness_indicator}"
-    #     )
-
-    print("\n--- Specific Case Verification (Mock Data - True Positive & True Negative) ---")
+    print("\n--- Specific Case Verification for is_military_aircraft function ---")
     test_cases = [
         # Expected True
         {"name": "Mil Flag True", "data": {"hex": "AE1234", "t": "F16", "op": "USAF", "mil": True}, "expected": True},
